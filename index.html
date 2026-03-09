@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Royal King Maker Chess Club</title>
+    <style>
+        :root { --primary: #1e293b; --accent: #d4af37; --success: #16a34a; --bg: #f8fafc; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: #1e293b; }
+        
+        /* SIGN-IN / SPLASH PAGE */
+        #sign-in-page { 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            height: 90vh; text-align: center; background: radial-gradient(circle, #2c3e50 0%, #000000 100%);
+            color: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .club-logo { font-size: 60px; margin-bottom: 10px; color: var(--accent); }
+        .club-name { font-size: 48px; font-weight: bold; letter-spacing: 2px; margin-bottom: 30px; text-transform: uppercase; }
+        .enter-btn { 
+            padding: 15px 40px; font-size: 20px; background: var(--accent); color: black; 
+            border: none; border-radius: 50px; cursor: pointer; font-weight: bold; transition: transform 0.2s;
+        }
+        .enter-btn:hover { transform: scale(1.05); background: #f1c40f; }
+
+        /* MAIN APP STYLES */
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 1000px; margin: 0 auto 20px; display: none; }
+        h1, h2 { color: var(--primary); border-bottom: 2px solid var(--accent); padding-bottom: 10px; }
+        textarea { width: 100%; height: 150px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-size: 14px; margin-top: 10px; }
+        .controls { display: flex; gap: 10px; margin: 20px 0; flex-wrap: wrap; }
+        button { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-neutral { background: #64748b; color: white; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+        th { background: #f1f5f9; }
+        .score-btns { display: flex; gap: 5px; }
+        .late-reg { display: flex; gap: 10px; margin-top: 20px; padding-top: 20px; border-top: 1px dashed #cbd5e1; }
+        input { padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; flex-grow: 1; }
+
+        @media print {
+            .no-print, #sign-in-page { display: none !important; }
+            .card { display: block !important; box-shadow: none; width: 100%; margin: 0; padding: 0; }
+            body { background: white; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- SIGN-IN PAGE -->
+<div id="sign-in-page">
+    <div class="club-logo">♔</div>
+    <div class="club-name">Royal King Maker <br> Chess Club</div>
+    <button class="enter-btn" onclick="showSetup()">Enter Tournament Manager</button>
+</div>
+
+<!-- SETUP VIEW -->
+<div class="card no-print" id="setup-view">
+    <h1>Tournament Setup</h1>
+    <p>Paste student names from Excel (one per line):</p>
+    <textarea id="player-names" placeholder="Ex:&#10;Aarav Sharma&#10;Diya Gupta..."></textarea>
+    <div class="controls">
+        <button class="btn-primary" onclick="initTournament()">Start Tournament</button>
+    </div>
+</div>
+
+<!-- MAIN ROUND VIEW -->
+<div class="card" id="main-view">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 id="round-header">Round 1</h2>
+        <div class="no-print">
+            <button class="btn-neutral" onclick="window.print()">Print Round</button>
+            <button class="btn-success" id="next-round-btn" onclick="nextRound()" disabled>Next Round Pairings</button>
+        </div>
+    </div>
+    <div id="pairings-list"></div>
+    <div class="late-reg no-print">
+        <input type="text" id="late-name" placeholder="Late student name...">
+        <button class="btn-neutral" onclick="addLatePlayer()">Add Late Player</button>
+    </div>
+</div>
+
+<!-- LEADERBOARD VIEW -->
+<div class="card" id="leaderboard-view">
+    <h2>Leaderboard (Buchholz Tie-break)</h2>
+    <table id="standings-table">
+        <thead>
+            <tr><th>Rank</th><th>Name</th><th>Points</th><th>Buchholz</th></tr>
+        </thead>
+        <tbody id="standings-body"></tbody>
+    </table>
+    <div class="no-print" style="margin-top:15px;">
+        <button class="btn-neutral" onclick="window.print()">Print Standings</button>
+    </div>
+</div>
+
+<script>
+    let players = [];
+    let pairings = [];
+    let currentRound = 0;
+
+    function showSetup() {
+        document.getElementById('sign-in-page').style.display = 'none';
+        document.getElementById('setup-view').style.display = 'block';
+    }
+
+    function initTournament() {
+        const input = document.getElementById('player-names').value.trim();
+        if (!input) return alert("Please enter player names.");
+        players = input.split('\n').map(n => ({
+            name: n.trim(), points: 0, opponents: [], hasHadBye: false, buchholz: 0
+        })).filter(p => p.name !== "");
+        document.getElementById('setup-view').style.display = 'none';
+        document.getElementById('main-view').style.display = 'block';
+        document.getElementById('leaderboard-view').style.display = 'block';
+        generatePairings();
+    }
+
+    function addLatePlayer() {
+        const name = document.getElementById('late-name').value.trim();
+        if (!name) return;
+        players.push({ name, points: 0, opponents: [], hasHadBye: false, buchholz: 0 });
+        document.getElementById('late-name').value = "";
+        alert(name + " added for the next round!");
+        updateStandings();
+    }
+
+    function calculateBuchholz() {
+        players.forEach(p => {
+            p.buchholz = p.opponents.reduce((sum, oppName) => {
+                const opp = players.find(x => x.name === oppName);
+                return sum + (opp ? opp.points : 0);
+            }, 0);
+        });
+    }
+
+    function generatePairings() {
+        currentRound++;
+        document.getElementById('round-header').innerText = "Round " + currentRound + " - Royal King Maker CC";
+        document.getElementById('next-round-btn').disabled = true;
+        let pool = [...players].sort((a, b) => b.points - a.points || Math.random() - 0.5);
+        pairings = [];
+        let paired = new Set();
+
+        if (pool.length % 2 !== 0) {
+            const byeCandidate = [...pool].reverse().find(p => !p.hasHadBye) || pool[pool.length-1];
+            pairings.push({ white: byeCandidate, black: { name: "BYE" }, result: "1-0" });
+            paired.add(byeCandidate.name);
+        }
+
+        for (let i = 0; i < pool.length; i++) {
+            let p1 = pool[i];
+            if (paired.has(p1.name)) continue;
+            let p2 = pool.find(potential => !paired.has(potential.name) && potential.name !== p1.name && !p1.opponents.includes(potential.name));
+            if (!p2) p2 = pool.find(p => !paired.has(p.name) && p.name !== p1.name); // Fallback
+            if (p2) { pairings.push({ white: p1, black: p2, result: null }); paired.add(p1.name); paired.add(p2.name); }
+        }
+        renderPairings();
+    }
+
+    function renderPairings() {
+        let html = `<table><tr><th>Board</th><th>White</th><th>Result</th><th>Black</th></tr>`;
+        pairings.forEach((pair, idx) => {
+            let res = pair.black.name === "BYE" ? "1-0 (Bye)" : (pair.result || `<div class="score-btns no-print">
+                <button class="btn-neutral" onclick="record('${idx}', '1-0')">1-0</button>
+                <button class="btn-neutral" onclick="record('${idx}', '0.5')">½-½</button>
+                <button class="btn-neutral" onclick="record('${idx}', '0-1')">0-1</button>
+            </div>`);
+            html += `<tr><td>${idx+1}</td><td>${pair.white.name}</td><td>${res}</td><td>${pair.black.name}</td></tr>`;
+        });
+        document.getElementById('pairings-list').innerHTML = html + `</table>`;
+    }
+
+    function record(idx, res) {
+        let pair = pairings[idx]; pair.result = res;
+        if (res === '1-0') pair.white.points += 1;
+        else if (res === '0-1') pair.black.points += 1;
+        else { pair.white.points += 0.5; pair.black.points += 0.5; }
+        pair.white.opponents.push(pair.black.name); pair.black.opponents.push(pair.white.name);
+        if (pair.black.name === "BYE") pair.white.hasHadBye = true;
+        renderPairings(); updateStandings();
+        if (pairings.every(p => p.result !== null || p.black.name === "BYE")) document.getElementById('next-round-btn').disabled = false;
+    }
+
+    function updateStandings() {
+        calculateBuchholz();
+        let sorted = [...players].sort((a, b) => b.points - a.points || b.buchholz - a.buchholz);
+        let html = '';
+        sorted.forEach((p, i) => { html += `<tr><td>${i+1}</td><td>${p.name}</td><td>${p.points}</td><td>${p.buchholz.toFixed(1)}</td></tr>`; });
+        document.getElementById('standings-body').innerHTML = html;
+    }
+
+    function nextRound() { generatePairings(); }
+</script>
+
+</body>
+</html>
